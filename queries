@@ -1,0 +1,36 @@
+-- Create a table
+CREATE TABLE tamu_salaries (col_value STRING);
+
+-- Load the data into the table (I am using Hortonwork's sandbox on my local machine, on an Oracle Virtual Box)
+LOAD DATA INPATH '/user/hue/salaries.csv' OVERWRITE INTO TABLE tamu_salaries;
+
+-- Create another table with the required fields ('entity' contains information for whom they work for, like State, School District etc.)
+CREATE TABLE tamu (employeeID FLOAT, name STRING, department STRING, salary FLOAT, entity STRING);
+
+-- Extract required data from 'tamu_salaries' and put it in 'tamu', using regular expression extract
+INSERT OVERWRITE TABLE tamu
+SELECT
+  regexp_extract(col_value, '^(?:([^,]*)\,?){1}', 1) employeeID,
+  regexp_extract(col_value, '^(?:([^,]*)\,?){2}', 1) name,
+  regexp_extract(col_value, '^(?:([^,]*)\,?){4}', 1) department,
+  regexp_extract(col_value, '^(?:([^,]*)\,?){7}', 1) salary,
+  regexp_extract(col_value, '^(?:([^,]*)\,?){8}', 1) entity
+FROM tamu_salaries;
+
+-- Cleaning up the entity field, due to the occurence of '0' in it (with a workaround for deleting values)
+INSERT OVERWRITE TABLE tamu
+SELECT * FROM tamu
+WHERE entity <> '0';
+
+-- Fetch maximum salary for a person, by department
+SELECT a.employeeID, a.name, a.department, a.salary
+FROM tamu a
+JOIN (SELECT department, max(salary) salary FROM tamu GROUP BY department) b
+ON (a.department = b.department AND a.salary = b.salary);
+
+-- Running total of employee salaries, by department
+SELECT a.department, a.employeeID, a.name, a.salary, SUM(b.salary)
+FROM tamu a
+LEFT OUTER JOIN tamu b
+ON b.department = a.department AND b.employeeID <= a.employeeID
+GROUP BY a.department;
